@@ -2,12 +2,12 @@ from pathlib import Path
 
 import requests
 
-def load_cookie():
+def load_cookie() -> None:
     with open(Path.cwd().parent.parent / "cookie.txt", "r") as cookie:
         return cookie.readline()
 
 
-def get_online_input(url, filename):
+def get_online_input(url: str, filename: str) -> None:
     cookie = load_cookie()
     response = requests.get(url, cookies={"session": cookie})
     if response.ok:
