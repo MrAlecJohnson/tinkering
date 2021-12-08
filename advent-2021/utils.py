@@ -22,15 +22,23 @@ def get_input(day: int):
     get_online_input(f"https://adventofcode.com/2021/day/{day}/input", f"inputs_{day}.txt")
 
 
-def load_data(filename, as_list=True, number=False):
+def load_data(
+    filename,
+    list_type: str = "line",
+    number: bool = False,
+):
+    """List_type can be 'line', 'comma' or 'none'."""
     if isinstance(filename, int):
         filename = f"inputs_{filename}.txt"
     with open(Path("data") / filename) as f:
-        if as_list and number:
+        if list_type == "line" and number:
             return [int(line.strip()) for line in f.readlines()]
-        elif as_list:
+        elif list_type == "comma" and number:
+            return [int(num.strip()) for num in f.read().split(",")]
+        elif list_type == "line":
             return [line.strip() for line in f.readlines()]
+        elif list_type == "comma":
+            return [text.strip() for text in f.read().split(",")]
         elif number:
             return int(f.read())
-        else:
-            return f.read()
+        return f.read()
