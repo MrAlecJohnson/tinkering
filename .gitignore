@@ -1,6 +1,7 @@
 # Data
 *.csv
 *.txt
+!requirements.txt
 .vscode/
 
 # Byte-compiled / optimized / DLL files
