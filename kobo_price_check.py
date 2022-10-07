@@ -2,6 +2,7 @@
 
 Next step is to multithread the requests."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -39,26 +40,40 @@ def get_book_details(soup):
     return {"title": title, "author": author, "price": price, "cheap": cheap}
 
 
+def get_price_details(url):
+    """Do everything for one url."""
+    url = url.strip()
+    soup = make_soup(url)
+    details = get_book_details(soup)
+    details["url"] = url
+    return details
+
+
 def main():
     with Path(WISHLIST).open("r") as file:
         wishlist = file.readlines()
 
-    cheap_books = []
-    for url in tqdm(wishlist):
-        soup = make_soup(url.strip())
-        try:
-            details = get_book_details(soup)
-        except AttributeError as error:
-            print(f"Failed to get details for '{url}'")
-            print(error)
-            print()
-        if details["cheap"]:
-            cheap_books.append(
-                (details["title"], details["author"], details["price"], url)
-            )
+    results = []
+    failed = []
+    with tqdm(desc="Wishlist books", total=len(wishlist)) as progress_bar:
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(get_price_details, url): url for url in wishlist}
+        for future in as_completed(futures):
+            if future.exception():
+                failed.append(futures[future])
+            else:
+                results.append(future.result())
+            progress_bar.update(1)
+
+    cheap_books = [
+        (result["title"], result["author"], result["price"], result["url"])
+        for result in results
+        if result["cheap"]
+    ]
 
     if cheap_books:
-        print(tabulate(cheap_books, headers=["Title", "Author", "Price", "Url"]))
+        ordered = sorted(cheap_books, key=lambda book: book[1])
+        print(tabulate(ordered, headers=["Title", "Author", "Price", "Url"]))
     else:
         print(f"Nothing going for {MAX_PRICE} or less")
 
