@@ -3,6 +3,7 @@
 Next step is to multithread the requests."""
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -12,7 +13,7 @@ from tqdm import tqdm
 
 
 AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:105.0) Gecko/20100101 Firefox/105.0"
-MAX_PRICE = 200
+MAX_PRICE = 2.00
 WISHLIST = "wishlist.txt"
 
 
@@ -29,14 +30,16 @@ def make_soup(url: str):
 
 
 def get_book_details(soup):
-    title = soup.find("p", {"class": "sub-section-title"}).text.strip()
-    author = soup.find("p", {"class": "book-author"}).text[3:].strip()
-    price = (
-        soup.find("div", {"class": "active-price"})
-        .find("span", {"class": "price"})
-        .text.strip()
+    data = soup.find(
+        "div", {"class": "kobo-gizmo", "data-kobo-gizmo": "RatingAndReviewWidget"}
     )
-    cheap = int(price[1:].replace(".", "")) <= MAX_PRICE
+    gizmo = json.loads(data["data-kobo-gizmo-config"])
+    googlebook = json.loads(gizmo["googleBook"])
+    title = googlebook["name"].strip()
+    author = googlebook["author"]["name"].strip()
+    price = googlebook["workExample"]["potentialAction"]["expectsAcceptanceOf"]["price"]
+    cheap = price <= MAX_PRICE
+
     return {"title": title, "author": author, "price": price, "cheap": cheap}
 
 
@@ -57,25 +60,31 @@ def main():
     failed = []
     with tqdm(desc="Wishlist books", total=len(wishlist)) as progress_bar:
         with ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(get_price_details, url): url for url in wishlist}
-        for future in as_completed(futures):
-            if future.exception():
-                failed.append(futures[future])
-            else:
-                results.append(future.result())
-            progress_bar.update(1)
+            futures = {
+                executor.submit(get_price_details, (url)): url for url in wishlist
+            }
+            for future in as_completed(futures):
+                if future.exception():
+                    failed.append(futures[future])
+                else:
+                    results.append(future.result())
+                progress_bar.update(1)
 
-    cheap_books = [
-        (result["title"], result["author"], result["price"], result["url"])
-        for result in results
-        if result["cheap"]
-    ]
-
-    if cheap_books:
-        ordered = sorted(cheap_books, key=lambda book: book[1])
-        print(tabulate(ordered, headers=["Title", "Author", "Price", "Url"]))
+    if failed:
+        print("Errors found")
+        print(failed)
     else:
-        print(f"Nothing going for {MAX_PRICE} or less")
+        cheap_books = [
+            (result["title"], result["author"], result["price"], result["url"])
+            for result in results
+            if result["cheap"]
+        ]
+
+        if cheap_books:
+            ordered = sorted(cheap_books, key=lambda book: book[1])
+            print(tabulate(ordered, headers=["Title", "Author", "Price", "Url"]))
+        else:
+            print(f"Nothing going for {MAX_PRICE} or less")
 
 
 if __name__ == "__main__":
